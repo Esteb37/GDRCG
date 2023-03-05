@@ -1,114 +1,116 @@
 import os
 import openai
-
+import re
+import sys
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-CONTEXT = open("context.txt", "r").read().replace("\n", "\n    ")
+CONTEXT = ""
+with open("Robot.py", "r", encoding="utf_8") as f:
+    CONTEXT = f.read().replace(
+        "\n", "\n    ")
 
-CONTENT = f"""{CONTEXT}
+CONTENT = f"""
+{CONTEXT}
 
-    # Executes the "[PROMPT]" command
+        # [PROMPT]
 """
 
 
-def get_undefined(text, CONTEXT):
-    # Get the functions that are referenced in the text but not defined in the context
+def get_undefined_functions(text: str) -> str:
+    # split text by all non-alphanumeric characters
+    referenced_pattern = r'self\.(\w+)\('
+    referenced = re.findall(referenced_pattern, text)
 
-    # Find functions that are referenced in the text as self.function_name()
-    text_lines = text.split("\n")
-    text_lines = [
-        line for line in text_lines if line.strip().startswith("self.")]
-    function_names = [line.split("self.")[1].split("(")[0]
-                      for line in text_lines]
+    defined_pattern = r'def (\w+)\('
+    defined = re.findall(defined_pattern, text)
 
-    # Find functions that are defined in the context
-    context_lines = CONTEXT.split("\n")
-    context_lines = [
-        line for line in context_lines if line.strip().startswith("def ")]
-    context_function_names = [line.split("def ")[1].split(
-        "(")[0] for line in context_lines]
-
-    # Get the difference between the two
-    undefined_function_names = set(function_names) - \
-        set(context_function_names)
-
-    return undefined_function_names
+    return set(referenced) - set(defined)
 
 
-def get_undefined_constants(text, CONTEXT):
-    # Get the constants that are referenced in the text but not defined in the context
+def get_undefined_constants(text: str) -> str:
+    # split text by all non-alphanumeric characters
+    referenced_pattern = r'self\.(\w+)'
+    referenced = re.findall(referenced_pattern, text)
 
-    # Find constants that are referenced in the text as self.CONSTANT
-    text_lines = text.split("\n")
-    text_lines = [
-        line for line in text_lines if line.strip().startswith("self.")]
-    constant_names = [line.split("self.")[1].split(" ")[0]
-                      for line in text_lines]
+    defined_pattern = r'(\w+) = '
+    defined = re.findall(defined_pattern, text)
 
-    # Find constants that are defined in the context
-    context_lines = CONTEXT.split("\n")
-    context_lines = [line for line in context_lines if line.endswith("=")]
-    context_constant_names = [line.split(" ")[-1]
-                              for line in context_lines]
-
-    # Get the difference between the two
-    undefined_constant_names = set(constant_names) - \
-        set(context_constant_names)
-
-    return undefined_constant_names
+    return set(referenced) - set(defined)
 
 
-while True:
-    prompt = input("Enter your prompt: ")
+def get_added_text(original: str, new: str):
+    # Find the chunk of text that was added
+    original_lines = original.split("\n")
+    new_lines = new.split("\n")
 
-    full_prompt = CONTENT.replace("[PROMPT]", prompt)
+    for i in range(len(original_lines)):
+        if original_lines[i] != new_lines[i]:
+            return "\n".join(new_lines[i:])
 
-    print("Generating response...")
-    response = openai.Completion.create(
-        engine="code-davinci-002",
-        prompt=full_prompt,
-        max_tokens=1000,
-        temperature=0.2,
-        stop=["# Executes the"]
-    )
 
-    response_text = response.choices[0].text
+def get_completion(prompt: str):
+    for resp in openai.Completion.create(
+        model="code-davinci-002",
+        prompt=prompt,
+        max_tokens=4000,
+        temperature=0.0,
+        echo=True,
+        stop=["# Executes the "],
+        frequency_penalty=0.0,
+        presence_penalty=0.0,
+        stream=True,
+    ):
+        if resp != "[DONE]":
+            sys.stdout.write(resp.choices[0].text)
+            sys.stdout.flush()
+        else:
+            result = resp
 
-    # Get the actual code that was generated
-    lines = response_text.split("\n")
-    for i in range(len(lines)):
-        if lines[i].startswith(f"# Executes the \"{prompt}\" command"):
-            lines = lines[i+1:]
-            break
-    code = "\n".join(lines)
+    return result.choices[0].text
 
-    print("Response:")
-    print(code)
 
-    # Complete for the functions that are undefined
-    undefined_function_names = get_undefined(response_text, CONTEXT)
-    for function_name in undefined_function_names:
-        additional_prompt = CONTEXT + "\n\tdef " + function_name
-        print("Completing for " + function_name+"... ")
-        response = openai.Completion.create(
-            engine="code-davinci-002",
-            prompt=full_prompt,
-            max_tokens=1000,
-            temperature=0.2,
-            stop=["# Executes the"]
-        )
+def main():
+    while True:
+        # input("Enter your prompt: ")
+        prompt = "Read the quadrature encoder values and calculate distance travelled"
 
-    # Ask for the constants that are undefined
-    undefined_constant_names = get_undefined_constants(response_text, CONTEXT)
-    for constant_name in undefined_constant_names:
-        constant_value = input("What is the value of " + constant_name + "? ")
+        full_prompt = CONTENT.replace("[PROMPT]", prompt)
 
-        # Add it to the context under "# Constants"
-        context_lines = CONTEXT.split("\n")
-        for i in range(len(context_lines)):
-            if context_lines[i].startswith("# Constants"):
-                context_lines.insert(
-                    i+1, f"\t{constant_name} = {constant_value}")
-                break
-        CONTEXT = "\n".join(context_lines)
+        print("Generating response...")
+
+        new_text = get_completion(full_prompt)
+
+        code = get_added_text(CONTEXT, new_text)
+
+        print("Generated code:")
+        print(code)
+
+        undefined_function_names = get_undefined_functions(new_text)
+
+        completed_functions = False
+
+        for function_name in undefined_function_names:
+            print("Completing for " + function_name+"... ")
+
+            completed_functions = True
+
+            additional_prompt = new_text + \
+                "\n        def " + function_name+"(self"
+
+            response = get_completion(additional_prompt)
+            code = get_added_text(new_text, response)
+            new_text = response
+
+        if completed_functions:
+            print("Completed context: ")
+            print(new_text)
+
+        undefined_constant_names = get_undefined_constants(new_text)
+
+        print("Undefined constants: ")
+        print(undefined_constant_names)
+
+
+if __name__ == "__main__":
+    main()

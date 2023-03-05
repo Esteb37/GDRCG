@@ -1,7 +1,9 @@
+# pylint: disable-all
+
 """
-	Robot class
- 	Platform = Raspberry Pi 3
-	System = Differential Drive Robot
+    Robot class
+    Platform = Raspberry Pi 3
+    System = Differential Drive Robot
 """
 import RPi.GPIO as GPIO
 import time
@@ -26,7 +28,7 @@ class Robot:
     GYRO = 8
     MAX_SPEED = 255
 
-    # Executes the "Drive forward at max speed" command
+    # Drive forward at max speed
     def drive_forward_max(self):
         GPIO.output(self.MOTOR_RIGHT_PWM_A, self.MAX_SPEED)
         GPIO.output(self.MOTOR_RIGHT_PWM_B, 0)
