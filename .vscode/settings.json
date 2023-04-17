@@ -1,9 +1,10 @@
 {
-	"python.linting.banditEnabled": false,
-	"python.linting.enabled": false,
-	"python.linting.pylintEnabled": false,
-	"python.linting.flake8Enabled": false,
-	"python.linting.mypyEnabled": false,
-	"python.linting.prospectorEnabled": false,
-	"python.linting.pylamaEnabled": false
+	"python.autoComplete.extraPaths": [
+		"/home/estebanp/catkin_ws/devel/lib/python2.7/dist-packages",
+		"/opt/ros/melodic/lib/python2.7/dist-packages"
+	],
+	"python.analysis.extraPaths": [
+		"/home/estebanp/catkin_ws/devel/lib/python2.7/dist-packages",
+		"/opt/ros/melodic/lib/python2.7/dist-packages"
+	]
 }
